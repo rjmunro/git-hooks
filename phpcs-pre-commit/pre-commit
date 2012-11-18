@@ -41,12 +41,6 @@ if [ "$FILES" == "" ]; then
     exit 0
 fi
 
-# create temporary copy of staging area
-if [ -e $TMP_STAGING ]; then
-    rm -rf $TMP_STAGING
-fi
-mkdir $TMP_STAGING
-
 # match files against whitelist
 FILES_TO_CHECK=""
 for FILE in $FILES
@@ -62,6 +56,27 @@ done
 if [ "$FILES_TO_CHECK" == "" ]; then
     exit 0
 fi
+
+# create temporary copy of staging area
+if [ -e $TMP_STAGING ]; then
+    rm -rf $TMP_STAGING
+fi
+mkdir $TMP_STAGING
+
+# Copy contents of staged version of files to temporary staging area
+# because we only want the staged version that will be commited and not
+# the version in the working directory
+STAGED_FILES=""
+for FILE in $FILES_TO_CHECK
+do
+  ID=$(git diff-index --cached $against $FILE | cut -d " " -f4)
+
+  # create staged version of file in temporary staging area with the same
+  # path as the original file so that the phpcs ignore filters can be applied
+  mkdir -p "$TMP_STAGING/$(dirname $FILE)"
+  git cat-file blob $ID > "$TMP_STAGING/$FILE"
+  STAGED_FILES="$STAGED_FILES $TMP_STAGING/$FILE"
+done
 
 # execute the code sniffer
 if [ "$PHPCS_IGNORE" != "" ]; then
@@ -81,21 +96,6 @@ if [ "$PHPCS_IGNORE_WARNINGS" == "1" ]; then
 else
     IGNORE_WARNINGS=""
 fi
-
-# Copy contents of staged version of files to temporary staging area
-# because we only want the staged version that will be commited and not
-# the version in the working directory
-STAGED_FILES=""
-for FILE in $FILES_TO_CHECK
-do
-  ID=$(git diff-index --cached $against $FILE | cut -d " " -f4)
-
-  # create staged version of file in temporary staging area with the same
-  # path as the original file so that the phpcs ignore filters can be applied
-  mkdir -p "$TMP_STAGING/$(dirname $FILE)"
-  git cat-file blob $ID > "$TMP_STAGING/$FILE"
-  STAGED_FILES="$STAGED_FILES $TMP_STAGING/$FILE"
-done
 
 OUTPUT=$($PHPCS_BIN -s $IGNORE_WARNINGS  --standard=$PHPCS_CODING_STANDARD $ENCODING $IGNORE $STAGED_FILES)
 RETVAL=$?
